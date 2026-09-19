@@ -4,6 +4,10 @@ A deployment foundation for a manufacturing event explorer. Upload a CSV, store 
 
 Live app: https://web-production-11feb.up.railway.app · Username: `reviewer`. The password is stored in Railway's app variables and shared separately.
 
+Deployment verification: public HTTPS, Basic Auth, CSV upload, database reads, validation errors, pagination, and persistence across deployment have passed. The v0.2 frontend bundle is live. CI passed with a real Postgres database. Visual browser inspection has not been performed in this session.
+
+**Remaining account setup:** authorize Railway's GitHub integration for this repository and enable the `main` deployment trigger. Push-to-deploy is not yet verified. CLI deployment is working: `npx @railway/cli up --service web --detach` from this linked project. The Railway account is currently on the trial plan.
+
 ## Stack and decisions
 
 - React + TypeScript + Vite frontend; Python + FastAPI API.

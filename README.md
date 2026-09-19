@@ -2,6 +2,8 @@
 
 A deployment foundation for a manufacturing event explorer. Upload a CSV, store it in Postgres, and browse its original records. The included sample is synthetic; no manufacturing metrics or schema are assumed yet.
 
+Live app: https://web-production-11feb.up.railway.app · Username: `reviewer`. The password is stored in Railway's app variables and shared separately.
+
 ## Stack and decisions
 
 - React + TypeScript + Vite frontend; Python + FastAPI API.
@@ -50,6 +52,8 @@ cd ..
 
 Review the Railway plan and resource usage in the account dashboard. Store/share reviewer credentials separately from the repository. Basic Auth is a shared demo credential, not individual user accounts; browsers may retain it until the session closes.
 
+Railway currently accepts `railway.toml` but reports its retirement on December 1, 2026. If retaining this project beyond the exercise, migrate with `railway config migrate` and review the resulting infrastructure plan before applying it.
+
 ## Acceptance check
 
 - Unauthenticated `/` and `/api/datasets` return 401; authenticated requests work.
@@ -68,6 +72,8 @@ cd frontend && npm run build
 ```
 
 Parser/auth tests run without Postgres. The integration test imports, paginates, recreates the application, and checks persistence. It removes its own test dataset afterward.
+
+GitHub Actions runs all tests against Postgres 17 and builds the frontend on every push. To smoke-test a deployed instance, export `APP_URL`, `BASIC_AUTH_USERNAME`, and `BASIC_AUTH_PASSWORD`, then run `.venv/bin/python scripts/smoke.py`. This adds one synthetic sample dataset. Set `DATASET_ID` to the printed ID to verify the same dataset after redeployment without adding another upload.
 
 ## Next, when the log arrives
 

@@ -53,7 +53,7 @@ function App() {
   }
   const total = datasets.reduce((sum, d) => sum + d.row_count, 0);
   return <div className="shell">
-    <header><a className="brand" href="/"><span className="mark">H</span> helicon<span className="brand-divider">/</span><span className="subbrand">event explorer</span></a><span className="badge">Deployment preview · v0.1</span></header>
+    <header><a className="brand" href="/"><span className="mark">H</span> helicon<span className="brand-divider">/</span><span className="subbrand">event explorer</span></a><span className="badge">Connected preview · v0.2</span></header>
     <main>
       <div className="intro"><div><p className="eyebrow">MANUFACTURING INTELLIGENCE</p><h1>Start with the events.</h1><p className="lede">Import a log, explore its records, and build from what the data tells you.</p></div><span className="private">● Password protected</span></div>
       <section className="stats" aria-label="Dataset summary"><div><span>Datasets</span><strong>{datasets.length}</strong></div><div><span>Stored records</span><strong>{total.toLocaleString()}</strong></div><div><span>Workspace</span><strong className="small">Infrastructure preview</strong><span>Real log analysis comes next</span></div></section>

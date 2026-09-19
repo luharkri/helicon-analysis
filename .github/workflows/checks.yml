@@ -1,0 +1,34 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: helicon
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: helicon_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U helicon"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+        env:
+          TEST_DATABASE_URL: postgresql://helicon:test-only@localhost:5432/helicon_test
+      - run: npm ci && npm run build
+        working-directory: frontend

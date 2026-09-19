@@ -1,0 +1,9 @@
+timestamp,machine,event_type,duration_seconds
+2026-09-01T08:00:00Z,Press-01,cycle_completed,42
+2026-09-01T08:00:44Z,Press-01,cycle_completed,41
+2026-09-01T08:01:00Z,Cutter-02,cycle_completed,28
+2026-09-01T08:01:30Z,Cutter-02,inspection,15
+2026-09-01T08:02:00Z,Press-01,stopped,120
+2026-09-01T08:02:30Z,Cutter-02,cycle_completed,29
+2026-09-01T08:04:00Z,Press-01,started,0
+2026-09-01T08:04:43Z,Press-01,cycle_completed,43

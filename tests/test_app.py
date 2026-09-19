@@ -61,19 +61,42 @@ def test_upload_rejects_cross_site_and_invalid_data(client):
 
 
 @pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="Requires a disposable PostgreSQL database")
-def test_postgres_import_pagination_and_restart(monkeypatch):
+@pytest.mark.parametrize("filename, content, expected", [
+    ("test.csv", b"machine,event\nM1,start\nM2,stop\n", {"machine": "M2", "event": "stop"}),
+    ("test.jsonl", b'{"event_id":"a"}\n{"event_id":"a","quantity":0,"machine_id":null,"metadata":{"ok":false}}\n', {"event_id": "a", "quantity": 0, "machine_id": None, "metadata": {"ok": False}}),
+])
+def test_postgres_import_pagination_and_restart(monkeypatch, filename, content, expected):
     monkeypatch.setenv("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
     monkeypatch.setenv("BASIC_AUTH_USERNAME", "reviewer")
     monkeypatch.setenv("BASIC_AUTH_PASSWORD", "test-password")
     auth = ("reviewer", "test-password")
     with TestClient(create_app()) as client:
         assert client.get("/health").status_code == 200
-        response = client.post("/api/datasets", auth=auth, content=b"machine,event\nM1,start\nM2,stop\n", headers={"x-helicon-request": "1", "x-file-name": "test.csv"})
+        response = client.post("/api/datasets", auth=auth, content=content, headers={"x-helicon-request": "1", "x-file-name": filename})
         assert response.status_code == 201
         dataset_id = response.json()["id"]
         rows = client.get(f"/api/datasets/{dataset_id}/rows?limit=1&offset=1", auth=auth).json()
-        assert rows["rows"] == [{"row_number": 2, "data": {"machine": "M2", "event": "stop"}}]
+        assert rows["rows"] == [{"row_number": 2, "data": expected}]
     with TestClient(create_app()) as client:
         assert client.get(f"/api/datasets/{dataset_id}/rows", auth=auth).json()["dataset"]["row_count"] == 2
+        response = client.delete(f"/api/datasets/{dataset_id}", auth=auth, headers={"x-helicon-request": "1"})
+        assert response.status_code == 200
+        assert client.get(f"/api/datasets/{dataset_id}/rows", auth=auth).status_code == 404
+        assert client.delete(f"/api/datasets/{dataset_id}", auth=auth, headers={"x-helicon-request": "1"}).status_code == 404
         with client.app.state.pool.connection() as conn:
-            conn.execute("DELETE FROM datasets WHERE id = %s", (dataset_id,))
+            assert conn.execute("SELECT count(*) AS count FROM dataset_rows WHERE dataset_id = %s", (dataset_id,)).fetchone()["count"] == 0
+
+
+def test_jsonl_upload_validation(client):
+    response = client.post('/api/datasets', auth=('reviewer', 'test-password'),
+                           content=b'{"event_id":"a"}\ninvalid',
+                           headers={'x-helicon-request': '1', 'x-file-name': 'events.jsonl'})
+    assert response.status_code == 422
+    assert 'JSONL line 2:' in response.json()['detail']
+
+
+def test_delete_requires_auth_and_same_origin_header(client):
+    path = '/api/datasets/00000000-0000-0000-0000-000000000001'
+    assert client.delete(path).status_code == 401
+    assert client.delete(path, auth=('reviewer', 'test-password')).status_code == 403
+    assert client.delete(path, auth=('reviewer', 'test-password'), headers={'x-helicon-request': '1', 'sec-fetch-site': 'cross-site'}).status_code == 403

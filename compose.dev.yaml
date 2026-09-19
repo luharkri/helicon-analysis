@@ -1,0 +1,21 @@
+# Use with: docker compose -f compose.yaml -f compose.dev.yaml up
+services:
+  app:
+    command: ["uvicorn", "backend.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/backend"]
+    volumes:
+      - ./backend:/app/backend:ro
+  frontend:
+    image: node:24-alpine
+    working_dir: /workspace
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      API_PROXY_TARGET: http://app:8000
+    volumes:
+      - ./frontend:/workspace
+      - frontend-node-modules:/workspace/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - app
+volumes:
+  frontend-node-modules:

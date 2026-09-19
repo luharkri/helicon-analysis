@@ -1,84 +1,70 @@
-# Helicon
+# Helicon — Production Log Analysis
 
-A deployment foundation for a manufacturing event explorer. Upload a CSV, store it in Postgres, and browse its original records. The included sample is synthetic; no manufacturing metrics or schema are assumed yet.
+Explore manufacturing event logs to identify blocked jobs, tooling delays, scrap losses, and customer output shortfalls. Charts link to supporting jobs and event histories.
 
-Live app: https://web-production-11feb.up.railway.app · Username: `reviewer`. The password is stored in Railway's app variables and shared separately.
+**[Live app](https://web-production-11feb.up.railway.app)** · Username: `reviewer` · Password shared separately.
 
-Deployment verification: public HTTPS, Basic Auth, CSV upload, database reads, validation errors, pagination, and persistence across deployment have passed. The v0.2 frontend bundle is live. CI passed with a real Postgres database. Visual browser inspection has not been performed in this session.
+## Dashboards
 
-**Remaining account setup:** authorize Railway's GitHub integration for this repository and enable the `main` deployment trigger. Push-to-deploy is not yet verified. CLI deployment is working: `npx @railway/cli up --service web --detach` from this linked project. The Railway account is currently on the trial plan.
-
-## Stack and decisions
-
-- React + TypeScript + Vite frontend; Python + FastAPI API.
-- One Docker image: FastAPI serves both the built UI and API on one origin.
-- Separate Postgres service. Each upload has a dataset ID; rows are JSONB with their original strings and ordering preserved. Add typed event tables after inspecting the real log.
-- HTTP Basic Auth protects the UI, assets, docs, downloads, and API. Credentials live in environment variables. `/health` is public and returns only availability, including a database check.
-- Uploads are atomic: invalid files produce no partial datasets. UTF-8 comma-separated CSV, unique nonempty headers, maximum 10 MB / 100,000 rows / 100 columns. Re-uploading intentionally creates a new dataset.
-- No background queue or analytics engine yet. This slice verifies deployment and persistence before the timed build.
+| Tab | Purpose |
+| --- | --- |
+| Data | Upload JSONL/NDJSON or CSV, inspect records, and delete datasets |
+| Summary | Overdue blocked jobs and parts with the highest scrap rates |
+| Jobs | Unresolved blockers, ranked by duration, with event timelines |
+| Tooling | Missing-tool delays and scrap associated with tools |
+| Materials / Parts | Good output, scrap units, and scrap rates by material or part |
+| Customer Shortfalls | Completed-job good output below original targets |
+| Run Size vs Scrap | Filterable scatter plot, fitted trend, and exploratory outlier flags |
 
 ## Run locally
 
-With Docker Compose:
+Requires Docker Compose. On first setup:
 
 ```sh
 cp .env.example .env
-# Replace BASIC_AUTH_PASSWORD in .env.
-docker compose up --build
+# Set BASIC_AUTH_PASSWORD in .env.
+docker compose up --build -d
 ```
 
-Open http://localhost:8000 and use the credentials from `.env`. The named Postgres volume survives app rebuilds. `docker compose down -v` deletes that local database.
+Open **http://localhost:8000** and sign in with the credentials in `.env`.
 
-Without Docker, use an existing PostgreSQL database:
+For automatic updates while editing:
+
+```sh
+docker compose -f compose.yaml -f compose.dev.yaml up
+```
+
+Open **http://localhost:5173**. Frontend changes update automatically; backend changes restart the API. Both modes share the same Postgres volume. Rebuild after Python dependency changes. `.env` is ignored by Git.
+
+## Data and calculations
+
+- Uploads accept UTF-8 files up to 10 MB, 100,000 records, and 100 top-level fields. JSONL requires one object per line; CSV requires headers. Invalid files are rejected atomically.
+- Imported records are preserved as JSONB. Analytics use the first imported record per event ID, disclose conflicts, and order events by timestamp. The latest valid event sets the historical **as-of** time.
+- A job is unfinished without a recorded completion. Blocks remain unresolved until an unblock or completion; production activity alone does not clear them.
+- Output metrics use the latest completion snapshot. Scrap rate is total scrap / (good + scrap). Shortfall is `max(original target − good output, 0)` per job, then summed.
+- Tool associations are inferred from job history. Missing/conflicting associations are labeled unknown. Tooling delays measure **job-hours**, not physical tool downtime; associations do not prove defect causation.
+- Run-size flags exceed three residual standard deviations from an unweighted linear fit. These are exploratory signals, not validated predictions. Customer shortfalls do not establish shipment shortages.
+
+## Stack and deployment
+
+React + TypeScript + Vite, FastAPI, and Postgres. One Docker image serves the production UI and API; Postgres stores datasets separately. Basic Auth protects the application. `/health` checks database availability.
+
+Railway requires `DATABASE_URL`, `BASIC_AUTH_USERNAME`, and `BASIC_AUTH_PASSWORD`. Deploy from a linked checkout:
+
+```sh
+npx @railway/cli up --service web --detach
+```
+
+GitHub push-to-deploy has not been verified; CLI deployment is used.
+
+## Validation
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-cd frontend
-npm ci
-npm run build
-cd ..
-# Export DATABASE_URL, BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD in your shell.
-.venv/bin/uvicorn backend.main:create_app --factory --host 127.0.0.1 --port 8000
-```
-
-## Deploy to Railway
-
-1. Create a Railway project and add a **PostgreSQL** service named `Postgres`.
-2. Add an app service from the GitHub repository, using branch `main`.
-3. Set app variables:
-   - `DATABASE_URL=${{Postgres.DATABASE_URL}}` (reference the database's private URL).
-   - `BASIC_AUTH_USERNAME=reviewer`.
-   - `BASIC_AUTH_PASSWORD=<a long random password>`.
-4. Railway reads `Dockerfile` and `railway.toml`. The app listens on Railway's `PORT`; `/health` must pass before the deployment becomes active.
-5. In the app service's Networking settings, **Generate Domain**. Open the HTTPS URL and authenticate. The database does not need a public web domain or an app-side volume.
-6. Keep deployment on push enabled for `main`.
-
-Review the Railway plan and resource usage in the account dashboard. Store/share reviewer credentials separately from the repository. Basic Auth is a shared demo credential, not individual user accounts; browsers may retain it until the session closes.
-
-Railway currently accepts `railway.toml` but reports its retirement on December 1, 2026. If retaining this project beyond the exercise, migrate with `railway config migrate` and review the resulting infrastructure plan before applying it.
-
-## Acceptance check
-
-- Unauthenticated `/` and `/api/datasets` return 401; authenticated requests work.
-- Download and upload `samples/mock-events.csv`; verify eight stored records.
-- Upload a malformed CSV; verify a clear error and no extra dataset.
-- Push a visible UI change; wait for the healthy deployment at the same URL.
-- Reload and verify the original dataset and rows still exist.
-
-## Tests
-
-```sh
 .venv/bin/python -m pytest -q
-# Optional real PostgreSQL integration test (uses a disposable DB):
-TEST_DATABASE_URL=postgresql://... .venv/bin/python -m pytest -q
-cd frontend && npm run build
+npm --prefix frontend ci
+npm --prefix frontend run build
 ```
 
-Parser/auth tests run without Postgres. The integration test imports, paginates, recreates the application, and checks persistence. It removes its own test dataset afterward.
-
-GitHub Actions runs all tests against Postgres 17 and builds the frontend on every push. To smoke-test a deployed instance, export `APP_URL`, `BASIC_AUTH_USERNAME`, and `BASIC_AUTH_PASSWORD`, then run `.venv/bin/python scripts/smoke.py`. This adds one synthetic sample dataset. Set `DATASET_ID` to the printed ID to verify the same dataset after redeployment without adding another upload.
-
-## Next, when the log arrives
-
-Inspect columns and event meanings, define typed transformations, then build the most useful analysis. The upload and deployment path is independent of that product decision.
+Set `TEST_DATABASE_URL` to a disposable Postgres database to include integration tests. CI runs tests with Postgres and builds the frontend. Browser interaction checks are separate from these automated checks.
